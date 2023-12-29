@@ -7,12 +7,15 @@ import (
 )
 
 type StubbedI interface {
-	StubMethod(methodName string, fn interface{})
+	Stub(methodName string, fn interface{})
 	IsStubbed(methodName string) bool
 
-	RestoreBehavior(methodName string)
+	Unstub(methodName string)
 
-	MethodCalls(methodName string) [][]interface{}
+	AllCallArgs(methodName string) [][]interface{}
+	CallArgs(methodName string, idx int) []interface{}
+	LastCallArgs(methodName string) []interface{}
+	MethodCallCount(methodName string) int
 	WasMethodCalledWith(methodName string, args ...interface{}) bool
 
 	Call(methodName string, args ...interface{}) []interface{}
@@ -40,7 +43,7 @@ type StubbedI interface {
 type Stubbed[SO any] struct {
 	wrapper              interface{} // the struct that wraps the stubbed object
 	stubbedObj           *SO         // the struct being stubbed
-	callbackByMethodName map[string]interface{}
+	fnByMethodName       map[string]interface{}
 	callArgsByMethodName map[string][][]interface{}
 	mu                   sync.Mutex // just in case tests run in parallel (is this overkill?)
 }
@@ -49,7 +52,7 @@ func NewStubbed[SO any](wrapper interface{}, objToStub *SO) *Stubbed[SO] {
 	return &Stubbed[SO]{
 		wrapper:              wrapper,
 		stubbedObj:           objToStub,
-		callbackByMethodName: make(map[string]interface{}),
+		fnByMethodName:       make(map[string]interface{}),
 		callArgsByMethodName: make(map[string][][]interface{}),
 	}
 }
@@ -57,27 +60,27 @@ func NewStubbed[SO any](wrapper interface{}, objToStub *SO) *Stubbed[SO] {
 //	NOTE: Thoroughly assert on the typing of the passed fn.
 //	This frees us from having to do any type assertions
 //	at method invocation time.
-func (s *Stubbed[SO]) StubMethod(methodName string, fn interface{}) {
+func (s *Stubbed[SO]) Stub(methodName string, fn interface{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ValidateStubSignature(s.stubbedObj, methodName, fn)
-	s.callbackByMethodName[methodName] = fn
+	s.fnByMethodName[methodName] = fn
 }
 
 func (s *Stubbed[SO]) IsStubbed(methodName string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, ok := s.callbackByMethodName[methodName]
+	_, ok := s.fnByMethodName[methodName]
 	return ok
 }
 
-func (s *Stubbed[SO]) RestoreBehavior(methodName string) {
+func (s *Stubbed[SO]) Unstub(methodName string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.callbackByMethodName, methodName)
+	delete(s.fnByMethodName, methodName)
 }
 
-func (s *Stubbed[SO]) MethodCalls(methodName string) [][]interface{} {
+func (s *Stubbed[SO]) AllCallArgs(methodName string) [][]interface{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.callArgsByMethodName[methodName] == nil {
@@ -85,11 +88,36 @@ func (s *Stubbed[SO]) MethodCalls(methodName string) [][]interface{} {
 	}
 	return s.callArgsByMethodName[methodName]
 }
+func (s *Stubbed[SO]) CallArgs(methodName string, idx int) []interface{} {
+	allCallArgs := s.AllCallArgs(methodName)
+	if len(allCallArgs) <= idx {
+		panic(fmt.Sprintf("no call at index %d", idx))
+	}
+	return allCallArgs[idx]
+}
+
+func (s *Stubbed[SO]) LastCallArgs(methodName string) []interface{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.callArgsByMethodName[methodName] == nil {
+		panic(fmt.Sprintf("no calls to %s were made", methodName))
+	}
+	return s.callArgsByMethodName[methodName][len(s.callArgsByMethodName[methodName])-1]
+}
+
+func (s *Stubbed[SO]) MethodCallCount(methodName string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.callArgsByMethodName[methodName] == nil {
+		return 0
+	}
+	return len(s.callArgsByMethodName[methodName])
+}
 
 func (s *Stubbed[SO]) WasMethodCalledWith(methodName string, args ...interface{}) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, callArgs := range s.MethodCalls(methodName) {
+	for _, callArgs := range s.AllCallArgs(methodName) {
 		if reflect.DeepEqual(callArgs, args) {
 			return true
 		}
@@ -97,19 +125,41 @@ func (s *Stubbed[SO]) WasMethodCalledWith(methodName string, args ...interface{}
 	return false
 }
 
-//func (s *Stubbed[SO]) RecordMethodCall(methodName string, args ...interface{}) {
-//	s.mu.Lock()
-//	defer s.mu.Unlock()
-//	if s.callArgsByMethodName[methodName] == nil {
-//		s.callArgsByMethodName[methodName] = make([][]interface{}, 0)
-//	}
-//	s.callArgsByMethodName[methodName] = append(s.callArgsByMethodName[methodName], args)
-//}
-
 func (s *Stubbed[SO]) Call(methodName string, args ...interface{}) []interface{} {
 	s.mu.Lock()
+	fn := s.fnByMethodName[methodName]
+	s.mu.Unlock()
+
+	inVals := make([]reflect.Value, len(args)+1)
+	inVals[0] = reflect.ValueOf(s.stubbedObj)
+	for i, arg := range args {
+		inVals[i+1] = reflect.ValueOf(arg)
+	}
+
+	if fn == nil {
+		sMethod, methodFound := reflect.TypeOf(s.stubbedObj).MethodByName(methodName)
+		if !methodFound {
+			panic(fmt.Sprintf("stubbed object does not have a method named %s", methodName))
+		}
+		fn = sMethod.Func.Interface()
+	}
+	fnVal := reflect.ValueOf(fn)
+	outVals := fnVal.Call(inVals)
+	out := make([]interface{}, len(outVals))
+	for i, outVal := range outVals {
+		out[i] = outVal.Interface()
+	}
+	s.addCallArgs(methodName, args...)
+	return out
+}
+
+func (s *Stubbed[SO]) addCallArgs(methodName string, args ...interface{}) {
+	s.mu.Lock()
 	defer s.mu.Unlock()
-	return make([]interface{}, 0)
+	if s.callArgsByMethodName[methodName] == nil {
+		s.callArgsByMethodName[methodName] = make([][]interface{}, 0)
+	}
+	s.callArgsByMethodName[methodName] = append(s.callArgsByMethodName[methodName], args)
 }
 
 func ValidateStubSignature(stubbedObject interface{}, methodName string, fn interface{}) {

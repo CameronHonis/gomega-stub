@@ -77,18 +77,18 @@ var _ = Describe("Stubbed", func() {
 	BeforeEach(func() {
 		stubbedObject = NewStubbedObject()
 	})
-	Describe("StubMethod", func() {
+	Describe("Stub", func() {
 		It("adds the method to the stubbed object context", func() {
 			methodStub := func(rec *Object) string {
 				return "hello"
 			}
-			stubbedObject.StubMethod("GetFieldA", methodStub)
+			stubbedObject.Stub("GetFieldA", methodStub)
 			Expect(stubbedObject.IsStubbed("GetFieldA")).To(BeTrue())
 		})
 		When("the method name passed does not exist on the struct", func() {
 			It("panics", func() {
 				Expect(func() {
-					stubbedObject.StubMethod("someNonExistentMethod", func() {})
+					stubbedObject.Stub("someNonExistentMethod", func() {})
 				}).To(Panic())
 			})
 		})
@@ -96,14 +96,14 @@ var _ = Describe("Stubbed", func() {
 			When("the return type is incorrect", func() {
 				It("panics", func() {
 					Expect(func() {
-						stubbedObject.StubMethod("GetFieldA", func() {})
+						stubbedObject.Stub("GetFieldA", func() {})
 					}).To(Panic())
 				})
 			})
 			When("the number of arguments is incorrect", func() {
 				It("panics", func() {
 					Expect(func() {
-						stubbedObject.StubMethod("Add", func(a int) int {
+						stubbedObject.Stub("Add", func(rec *Object, a int) int {
 							return 0
 						})
 					}).To(Panic())
@@ -112,9 +112,66 @@ var _ = Describe("Stubbed", func() {
 			When("the argument types are incorrect", func() {
 				It("panics", func() {
 					Expect(func() {
-						stubbedObject.StubMethod("Add", func(a, b string) int {
+						stubbedObject.Stub("Add", func(rec *Object, a, b string) int {
 							return 0
 						})
+					}).To(Panic())
+				})
+			})
+		})
+	})
+	Describe("Unstub", func() {
+		BeforeEach(func() {
+			stubbedObject.Stub("GetFieldA", func(rec *Object) string {
+				return "hello"
+			})
+		})
+		It("removes the method from the stubbed object context", func() {
+			stubbedObject.Unstub("GetFieldA")
+			Expect(stubbedObject.IsStubbed("GetFieldA")).To(BeFalse())
+		})
+	})
+	Describe("Call", func() {
+		It("records the method call", func() {
+			stubbedObject.Call("Add", 1, 2)
+			Expect(stubbedObject.MethodCallCount("Add")).To(Equal(1))
+			addCalls := stubbedObject.AllCallArgs("Add")
+			Expect(addCalls).To(HaveLen(1))
+			Expect(addCalls[0]).To(Equal([]interface{}{1, 2}))
+		})
+		When("the method is not stubbed", func() {
+			It("calls the original method", func() {
+				stubbedObject.Call("SetFieldA", "changedFieldA")
+				Expect(stubbedObject.GetFieldA()).To(Equal("changedFieldA"))
+			})
+		})
+		When("the method is stubbed", func() {
+			BeforeEach(func() {
+				stubbedObject.Stub("GetFieldA", func(rec *Object) string {
+					return "stubbedFieldA"
+				})
+			})
+			It("calls the stubbed method", func() {
+				out := stubbedObject.Call("GetFieldA")
+				Expect(out).To(HaveLen(1))
+				Expect(out[0].(string)).To(Equal("stubbedFieldA"))
+			})
+			When("its called with the wrong number of arguments", func() {
+				It("panics", func() {
+					Expect(func() {
+						stubbedObject.Call("GetFieldA", "some-invalid-arg")
+					}).To(Panic())
+				})
+			})
+			When("its called with the wrong argument types", func() {
+				BeforeEach(func() {
+					stubbedObject.Stub("Add", func(rec *Object, a, b int) int {
+						return 0
+					})
+				})
+				It("panics", func() {
+					Expect(func() {
+						stubbedObject.Call("Add", "one", "two")
 					}).To(Panic())
 				})
 			})
