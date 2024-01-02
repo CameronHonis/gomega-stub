@@ -1,8 +1,8 @@
-package gomega_stub_test
+package stub_test
 
 import (
 	"fmt"
-	. "github.com/CameronHonis/gomega-stub"
+	. "github.com/CameronHonis/stub"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )

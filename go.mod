@@ -1,4 +1,4 @@
-module github.com/CameronHonis/gomega-stub
+module github.com/CameronHonis/stub
 
 go 1.18
 

@@ -1,1 +1,0 @@
-package gomega_stub

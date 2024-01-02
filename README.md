@@ -1,2 +1,2 @@
-# Gomega Stub
-Brings the tooling to enable stubbing with Gomega
+# Stub - For Go
+Delivers the tooling necessary to add stubs to your testing workflow

@@ -1,4 +1,4 @@
-package gomega_stub_test
+package stub_test
 
 import (
 	"testing"

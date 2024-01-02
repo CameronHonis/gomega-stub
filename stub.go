@@ -1,4 +1,4 @@
-package gomega_stub
+package stub
 
 import (
 	"fmt"
