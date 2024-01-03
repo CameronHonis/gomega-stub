@@ -171,10 +171,16 @@ func ValidateStubSignature(stubbedObject interface{}, methodName string, fn inte
 	}
 	soVal := reflect.ValueOf(stubbedObject)
 	soType := soVal.Type()
+
+	soName := soType.Name()
+	if soType.Kind() == reflect.Ptr {
+		soName = soType.Elem().Name()
+	}
+
 	soValMethod, foundMethod := soType.MethodByName(methodName)
 	if !foundMethod {
 		fmt.Println("method count: ", soType.NumMethod())
-		panic(fmt.Sprintf("methodName (%s) must be a method of stubObject", methodName))
+		panic(fmt.Sprintf("methodName (%s) must be a method of %s", methodName, soName))
 	}
 
 	// assert i/o count matches
@@ -182,26 +188,29 @@ func ValidateStubSignature(stubbedObject interface{}, methodName string, fn inte
 	soFuncType := soValMethod.Func.Type()
 	fnNumIn := fnType.NumIn()
 	soFuncNumIn := soFuncType.NumIn()
+
 	if soFuncNumIn != fnNumIn {
 		//	NOTE: this compares fn to the "under the hood" GENERATED function based upon the method signature
 		//	this adds the receiver as the first argument
-		panic(fmt.Sprintf("fn must have the same arg count as %s.%s's func signature\nDid you forget to include the receiver arg?", soType.Name(), methodName))
+		panic(fmt.Sprintf("fn must have the same arg count as %s.%s's func signature\nDid you forget to include the receiver arg?", soName, methodName))
 	}
 	fnNumOut := fnType.NumOut()
 	soFuncNumOut := soFuncType.NumOut()
 	if soFuncNumOut != fnNumOut {
-		panic(fmt.Sprintf("fn must have the same return count as %s.%s's func signature", soType.Name(), methodName))
+		panic(fmt.Sprintf("fn must have the same return count as %s.%s's func signature", soName, methodName))
 	}
 
 	// assert each i/o type match
 	for i := 0; i < fnNumIn; i++ {
 		if soFuncType.In(i) != fnType.In(i) {
-			panic(fmt.Sprintf("fn return #%d must have the same type as %s.%s's func signature", i, soType.Name(), methodName))
+			panic(fmt.Sprintf("fn param #%d must have the same type as %s.%s's func signature:"+
+				"\n\t%s (expected) is not %s (actual)", i, soName, methodName, soFuncType.In(i), fnType.In(i)))
 		}
 	}
 	for i := 0; i < fnNumOut; i++ {
 		if soFuncType.Out(i) != fnType.Out(i) {
-			panic(fmt.Sprintf("fn return #%d must have the same type as %s.%s's func signature", i, soType.Name(), methodName))
+			panic(fmt.Sprintf("fn return #%d must have the same type as %s.%s's func signature:"+
+				"\n\t%s (expected) is not %s (actual)", i, soName, methodName, soFuncType.Out(i), fnType.In(i)))
 		}
 	}
 }
