@@ -44,12 +44,12 @@ func (o *Object) privateMethod() string {
 //	provided by this package. The generator would be run as a separate step in the build process.
 //	The generator would also create the constructor and the method overrides on the base struct.
 type StubbedObject struct {
-	Stubbed[Object]
+	Mocked[Object]
 }
 
 func NewStubbedObject() *StubbedObject {
 	so := &StubbedObject{}
-	so.Stubbed = *NewStubbed[Object](so, NewObject())
+	so.Mocked = *NewMocked[Object](so, NewObject())
 	return so
 }
 
@@ -77,7 +77,7 @@ func (s *StubbedObject) privateMethod() string {
 	return out[0].(string)
 }
 
-var _ = Describe("Stubbed", func() {
+var _ = Describe("Mocked", func() {
 	var stubbedObject *StubbedObject
 	BeforeEach(func() {
 		stubbedObject = NewStubbedObject()
@@ -195,7 +195,7 @@ var _ = Describe("Stubbed", func() {
 				})
 				It("tracks the call args", func() {
 					stubbedObject.privateMethod()
-					callArgs := stubbedObject.Stubbed.LastCallArgs("privateMethod")
+					callArgs := stubbedObject.Mocked.LastCallArgs("privateMethod")
 					Expect(callArgs).To(HaveLen(0))
 				})
 			})

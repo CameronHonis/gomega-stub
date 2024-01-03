@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-type StubbedI interface {
+type MockedI interface {
 	Stub(methodName string, fn interface{})
 	IsStubbed(methodName string) bool
 
@@ -21,12 +21,12 @@ type StubbedI interface {
 	Call(methodName string, args ...interface{}) []interface{}
 }
 
-//	Stubbed is a struct that provides concrete implementations
-//	for the methods of the StubbedI interface. This struct is
+//	Mocked is a struct that provides concrete implementations
+//	for the methods of the MockedI interface. This struct is
 //	intended to be embedded in a stub struct "wrapper".
 //
 //	The final hierarchy should look like this:
-//		StubWrapper -> Stubbed -> StubbedStruct;
+//		StubWrapper -> Mocked -> StubbedStruct;
 //		[where each struct embeds the next]
 //
 //	I realize that creating and formatting a wrapper to implement
@@ -40,7 +40,7 @@ type StubbedI interface {
 //	* See (TODO - insert file name of generated file) for the generated file.
 //
 //	* See (TODO - insert file name of generator here) for the generator source code.
-type Stubbed[SO any] struct {
+type Mocked[SO any] struct {
 	wrapper              interface{} // the struct that wraps the stubbed object
 	stubbedObj           *SO         // the struct being stubbed
 	fnByMethodName       map[string]interface{}
@@ -48,8 +48,8 @@ type Stubbed[SO any] struct {
 	mu                   sync.Mutex // just in case tests run in parallel (is this overkill?)
 }
 
-func NewStubbed[SO any](wrapper interface{}, objToStub *SO) *Stubbed[SO] {
-	return &Stubbed[SO]{
+func NewMocked[SO any](wrapper interface{}, objToStub *SO) *Mocked[SO] {
+	return &Mocked[SO]{
 		wrapper:              wrapper,
 		stubbedObj:           objToStub,
 		fnByMethodName:       make(map[string]interface{}),
@@ -62,27 +62,27 @@ func NewStubbed[SO any](wrapper interface{}, objToStub *SO) *Stubbed[SO] {
 //	at method invocation time.
 //	TODO: add receiver as fn's first param, so I don't have to
 //	TODO: do this manually everytime I define a new stub
-func (s *Stubbed[SO]) Stub(methodName string, fn interface{}) {
+func (s *Mocked[SO]) Stub(methodName string, fn interface{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ValidateStubSignature(s.stubbedObj, methodName, fn)
 	s.fnByMethodName[methodName] = fn
 }
 
-func (s *Stubbed[SO]) IsStubbed(methodName string) bool {
+func (s *Mocked[SO]) IsStubbed(methodName string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, ok := s.fnByMethodName[methodName]
 	return ok
 }
 
-func (s *Stubbed[SO]) Unstub(methodName string) {
+func (s *Mocked[SO]) Unstub(methodName string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.fnByMethodName, methodName)
 }
 
-func (s *Stubbed[SO]) AllCallArgs(methodName string) [][]interface{} {
+func (s *Mocked[SO]) AllCallArgs(methodName string) [][]interface{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.callArgsByMethodName[methodName] == nil {
@@ -90,7 +90,7 @@ func (s *Stubbed[SO]) AllCallArgs(methodName string) [][]interface{} {
 	}
 	return s.callArgsByMethodName[methodName]
 }
-func (s *Stubbed[SO]) CallArgs(methodName string, idx int) []interface{} {
+func (s *Mocked[SO]) CallArgs(methodName string, idx int) []interface{} {
 	allCallArgs := s.AllCallArgs(methodName)
 	if len(allCallArgs) <= idx {
 		panic(fmt.Sprintf("no call at index %d", idx))
@@ -98,7 +98,7 @@ func (s *Stubbed[SO]) CallArgs(methodName string, idx int) []interface{} {
 	return allCallArgs[idx]
 }
 
-func (s *Stubbed[SO]) LastCallArgs(methodName string) []interface{} {
+func (s *Mocked[SO]) LastCallArgs(methodName string) []interface{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.callArgsByMethodName[methodName] == nil {
@@ -107,7 +107,7 @@ func (s *Stubbed[SO]) LastCallArgs(methodName string) []interface{} {
 	return s.callArgsByMethodName[methodName][len(s.callArgsByMethodName[methodName])-1]
 }
 
-func (s *Stubbed[SO]) MethodCallCount(methodName string) int {
+func (s *Mocked[SO]) MethodCallCount(methodName string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.callArgsByMethodName[methodName] == nil {
@@ -116,7 +116,7 @@ func (s *Stubbed[SO]) MethodCallCount(methodName string) int {
 	return len(s.callArgsByMethodName[methodName])
 }
 
-func (s *Stubbed[SO]) WasMethodCalledWith(methodName string, args ...interface{}) bool {
+func (s *Mocked[SO]) WasMethodCalledWith(methodName string, args ...interface{}) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, callArgs := range s.AllCallArgs(methodName) {
@@ -127,7 +127,7 @@ func (s *Stubbed[SO]) WasMethodCalledWith(methodName string, args ...interface{}
 	return false
 }
 
-func (s *Stubbed[SO]) Call(methodName string, args ...interface{}) []interface{} {
+func (s *Mocked[SO]) Call(methodName string, args ...interface{}) []interface{} {
 	s.mu.Lock()
 	fn := s.fnByMethodName[methodName]
 	s.mu.Unlock()
@@ -155,7 +155,7 @@ func (s *Stubbed[SO]) Call(methodName string, args ...interface{}) []interface{}
 	return out
 }
 
-func (s *Stubbed[SO]) addCallArgs(methodName string, args ...interface{}) {
+func (s *Mocked[SO]) addCallArgs(methodName string, args ...interface{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.callArgsByMethodName[methodName] == nil {
