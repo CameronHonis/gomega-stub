@@ -60,6 +60,8 @@ func NewStubbed[SO any](wrapper interface{}, objToStub *SO) *Stubbed[SO] {
 //	NOTE: Thoroughly assert on the typing of the passed fn.
 //	This frees us from having to do any type assertions
 //	at method invocation time.
+//	TODO: add receiver as fn's first param, so I don't have to
+//	TODO: do this manually everytime I define a new stub
 func (s *Stubbed[SO]) Stub(methodName string, fn interface{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -171,6 +173,7 @@ func ValidateStubSignature(stubbedObject interface{}, methodName string, fn inte
 	soType := soVal.Type()
 	soValMethod, foundMethod := soType.MethodByName(methodName)
 	if !foundMethod {
+		fmt.Println("method count: ", soType.NumMethod())
 		panic(fmt.Sprintf("methodName (%s) must be a method of stubObject", methodName))
 	}
 
